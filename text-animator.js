@@ -6,9 +6,9 @@ class TextAnimator extends HTMLElement {
 
   static get observedAttributes() {
     return [
-      'before-text', 'static-text', 'after-text', 'repeating-text', 'heading-tag',
-      'font-size', 'font-family', 'text-color', 'fill-color', 'cursor-symbol',
-      'cursor-color', 'background-color', 'animation-duration'
+      'static-text', 'repeating-text', 'heading-tag', 'font-size', 'font-family',
+      'text-color', 'fill-color', 'cursor-symbol', 'cursor-color', 'background-color',
+      'animation-duration'
     ];
   }
 
@@ -32,9 +32,7 @@ class TextAnimator extends HTMLElement {
   }
 
   render() {
-    const beforeText = this.getAttribute('before-text') || '';
     const staticText = this.getAttribute('static-text') || 'Hello, I’m';
-    const afterText = this.getAttribute('after-text') || '';
     const repeatingText = this.getAttribute('repeating-text') || 'Creative.,Coder.';
     const headingTag = this.getAttribute('heading-tag') || 'h1';
     const fontSize = parseFloat(this.getAttribute('font-size')) || 5.4; // In vw
@@ -45,16 +43,6 @@ class TextAnimator extends HTMLElement {
     const cursorColor = this.getAttribute('cursor-color') || '#FFFFFF'; // White
     const backgroundColor = this.getAttribute('background-color') || '#1A1A1A'; // Dark gray
     const animationDuration = parseFloat(this.getAttribute('animation-duration')) || 1; // Seconds
-
-    // Load GSAP dynamically
-    if (!window.gsap) {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/gsap.min.js';
-      script.onload = () => this.animate();
-      document.head.appendChild(script);
-    } else {
-      this.animate();
-    }
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -95,7 +83,7 @@ class TextAnimator extends HTMLElement {
           z-index: -1;
         }
 
-        .before, .static, .after, .text {
+        .static, .text {
           display: inline-block;
         }
 
@@ -106,72 +94,87 @@ class TextAnimator extends HTMLElement {
         }
       </style>
       <${headingTag}>
-        <span class="before">${beforeText}</span>
         <span class="box"></span>
         <span class="static">${staticText}</span>
         <span class="text"></span>
-        <span class="after">${afterText}</span>
         <span class="cursor">${cursorSymbol}</span>
       </${headingTag}>
     `;
 
-    this.animate = () => {
-      // Clean up previous animations
-      if (this.cursorTl) this.cursorTl.kill();
-      if (this.boxTl) this.boxTl.kill();
-      if (this.masterTl) this.masterTl.kill();
+    // Load GSAP and start animations once loaded
+    if (!window.gsap) {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/gsap.min.js';
+      script.onload = () => this.startAnimations(staticText, repeatingText, animationDuration);
+      document.head.appendChild(script);
+    } else {
+      this.startAnimations(staticText, repeatingText, animationDuration);
+    }
+  }
 
-      const staticElement = this.shadowRoot.querySelector('.static');
-      const boxElement = this.shadowRoot.querySelector('.box');
+  startAnimations(staticText, repeatingText, animationDuration) {
+    // Clean up previous animations
+    if (this.cursorTl) this.cursorTl.kill();
+    if (this.boxTl) this.boxTl.kill();
+    if (this.masterTl) this.masterTl.kill();
 
-      // Wait for DOM to render, then calculate dimensions
-      requestAnimationFrame(() => {
-        const staticWidth = staticElement.offsetWidth; // Pixels
-        const staticHeight = staticElement.offsetHeight; // Pixels
-        const vwWidth = (staticWidth / window.innerWidth) * 100; // Convert to vw
-        const vwHeight = (staticHeight / window.innerHeight) * 100; // Convert to vw
+    const staticElement = this.shadowRoot.querySelector('.static');
+    const boxElement = this.shadowRoot.querySelector('.box');
+    const textElement = this.shadowRoot.querySelector('.text');
 
-        // Cursor blink animation
-        this.cursorTl = gsap.to(this.shadowRoot.querySelector('.cursor'), {
-          opacity: 0,
-          ease: "power2.inOut",
-          repeat: -1
+    // Cursor blink animation
+    this.cursorTl = gsap.to(this.shadowRoot.querySelector('.cursor'), {
+      opacity: 0,
+      ease: "power2.inOut",
+      repeat: -1
+    });
+
+    // Box animation
+    requestAnimationFrame(() => {
+      const staticWidth = staticElement.offsetWidth; // Pixels
+      const staticHeight = staticElement.offsetHeight; // Pixels
+      const vwWidth = (staticWidth / window.innerWidth) * 100; // Convert to vw
+      const vwHeight = (staticHeight / window.innerHeight) * 100; // Convert to vw
+
+      this.boxTl = gsap.timeline();
+      this.boxTl
+        .to(boxElement, {
+          duration: animationDuration,
+          width: `${vwWidth}vw`,
+          delay: 0.5,
+          ease: "power4.inOut"
+        })
+        .from(staticElement, {
+          duration: animationDuration,
+          y: "7vw",
+          ease: "power3.out",
+          onComplete: () => this.masterTl.play()
+        })
+        .to(boxElement, {
+          duration: animationDuration,
+          height: `${vwHeight}vw`,
+          ease: "elastic.out(1, 0.3)"
         });
+    });
 
-        // Box animation
-        this.boxTl = gsap.timeline();
-        this.boxTl
-          .to(boxElement, {
-            duration: animationDuration,
-            width: `${vwWidth}vw`,
-            delay: 0.5,
-            ease: "power4.inOut"
-          })
-          .from(staticElement, {
-            duration: animationDuration,
-            y: "7vw",
-            ease: "power3.out",
-            onComplete: () => this.masterTl.play()
-          })
-          .to(boxElement, {
-            duration: animationDuration,
-            height: `${vwHeight}vw`,
-            ease: "elastic.out(1, 0.3)"
-          });
-
-        // Repeating text animation
-        const words = repeatingText.split(',').map(word => word.trim());
-        this.masterTl = gsap.timeline({ repeat: -1 }).pause();
-        words.forEach(word => {
-          const tl = gsap.timeline({ repeat: 1, yoyo: true, repeatDelay: 1 });
-          tl.to(this.shadowRoot.querySelector('.text'), {
-            duration: animationDuration,
-            text: word
-          });
-          this.masterTl.add(tl);
-        });
+    // Repeating text animation
+    const words = repeatingText.split(',').map(word => word.trim());
+    this.masterTl = gsap.timeline({ repeat: -1 });
+    words.forEach((word, index) => {
+      const tl = gsap.timeline({ repeat: 1, yoyo: true, repeatDelay: 1 });
+      tl.to(textElement, {
+        duration: animationDuration,
+        text: word,
+        ease: "none",
+        onStart: () => {
+          if (index === 0) textElement.textContent = ''; // Clear initial text
+        }
       });
-    };
+      this.masterTl.add(tl);
+    });
+
+    // Ensure the timeline starts
+    this.masterTl.play();
   }
 }
 
